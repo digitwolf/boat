@@ -6,11 +6,13 @@ import pydevd_pycharm
 import can
 import atexit
 import asyncio
-
+import logging, sys
 import bms
 
 from prometheus_client import start_http_server
 from prometheus_client import Gauge
+
+logging.basicConfig(format='[%(levelname)s] %(asctime)s:%(message)s', level=logging.INFO)
 
 handlers = [
     bms.BmsCellReportMessage.from_message,
@@ -30,14 +32,14 @@ def invert_cell_index(idx, ltc_id):
         return 12 + idx
     else:
         return idx
-    
+
 
 def log_cell_report(report):
     for k, v in report.volts.items():
         idx = invert_cell_index(k, report.ltc_id)
         if k <= 23:
             cell_voltage.labels(cell_id=idx).set(v/1000)
-            
+
 
 def log_cell_temperature(report):
     for i in range(len(report.thermistors_enabled)):
@@ -52,17 +54,17 @@ def parse_data(can):
     for handler in handlers:
         msg = handler(can)
         if msg is not None:
-            
+
             if isinstance(msg, bms.BmsCellReportMessage):
-                print(msg)
+                logging.debug("BmsCellReportMessage: %s", msg)
                 log_cell_report(msg)
-                
+
             if isinstance(msg, bms.BmsTemperatureStatus):
-                print(msg)
+                logging.debug("BmsTemperatureStatus: %s", msg)
                 log_cell_temperature(msg)
-            
+
             break
-            
+
 
 async def main():
     start_http_server(7001)
@@ -75,18 +77,19 @@ async def main():
         reader,
     ]
     notifier = can.Notifier(bus, [parse_data], loop=loop)
-
+    
     bus.send(bms.BmsCellReportMessage.create_request(0, 0))
     bus.send(bms.BmsCellReportMessage.create_request(0, 1))
     atexit.register(lambda: bus.shutdown())
 
+    logging.info("Started!")
     while True:
         # Wait for next message from AsyncBufferedReader
-        await asyncio.sleep(5)
+        await asyncio.sleep(10)
         bus.send(bms.BmsCellReportMessage.create_request(0, 0))
         bus.send(bms.BmsCellReportMessage.create_request(0, 1))
 
-    print("Done!")
+    #print("Done!")
     # Clean-up
     notifier.stop()
     bus.shutdown()
