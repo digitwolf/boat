@@ -1,17 +1,15 @@
-import pydevd_pycharm
+# import pydevd_pycharm
 # pydevd_pycharm.settrace('192.168.4.110', port=2345, stdoutToServer=True, stderrToServer=True)
 
 
-import can
-import atexit
 import asyncio
-import canopen
+import atexit
 import logging
-
-from prometheus_client import start_http_server
-from prometheus_client import Gauge
-
+import sys 
+import can
+import canopen
 from influxdb import InfluxDBClient
+from prometheus_client import Gauge, start_http_server
 
 BATTERY_VOLTAGE = Gauge('motor_battery_voltage', 'Motor Battery Voltage, V')
 MOTOR_CURRENT = Gauge('motor_current_amps', 'Motor Battery Current, A', ['sensor'])
@@ -29,7 +27,6 @@ MOTOR_TORQUE = Gauge('motor_torque', 'Torque in 12.4Nm', ['type'])
 MOTOR_RPM = Gauge('motor_rpm', 'RPM')
 
 db_client = InfluxDBClient('localhost', 8086, 'kisa', 'Ar@nji', 'boat')
-
 
 def write_rpm(rpm):
     body = [
@@ -153,7 +150,11 @@ handlers = {
 async def main():
     start_http_server(7002)
     network = canopen.Network()
-    network.connect(channel='can1', bustype='socketcan', bitrate=500000)
+    try:
+        network.connect(channel='can1', bustype='socketcan', bitrate=500000)
+    except Exception as error:
+        logging.error(f'Couldn\'t connect to CanOpen network: ', error)
+        sys.exit(-1)
 
     node = network.add_node(1, '/home/pi/AC24ls.dcf')
 
