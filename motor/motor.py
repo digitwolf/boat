@@ -11,6 +11,12 @@ import canopen
 from influxdb import InfluxDBClient
 from prometheus_client import Gauge, start_http_server
 
+import RPi.GPIO as GPIO
+GPIO.setmode(GPIO.BOARD)		#set pin numbering system
+GPIO.setup(32,GPIO.OUT)
+rpm_pwm = GPIO.PWM(32, 1)	
+rpm_pwm.start(50)
+
 BATTERY_VOLTAGE = Gauge('motor_battery_voltage', 'Motor Battery Voltage, V')
 MOTOR_CURRENT = Gauge('motor_current_amps', 'Motor Battery Current, A', ['sensor'])
 MOTOR_VOLTAGE = Gauge('motor_voltage', 'AC Motor Voltage, V')
@@ -28,6 +34,20 @@ MOTOR_RPM = Gauge('motor_rpm', 'RPM')
 
 db_client = InfluxDBClient('localhost', 8086, 'kisa', 'Ar@nji', 'boat')
 
+def get_rpm_frequency(rpm):
+    """
+    2000 - 250
+    rpm  - x
+    
+    x = rpm * 250 / 200
+    """
+    
+    return abs(rpm) * 180 / 1000
+
+def update_tach(rpm):
+    rpm_pwm.ChangeFrequency(get_rpm_frequency(rpm)) 
+
+
 def write_rpm(rpm):
     body = [
         {
@@ -38,6 +58,11 @@ def write_rpm(rpm):
         }
     ]
     db_client.write_points(body)
+    
+
+def record_rpm(pdo):
+    rpm=pdo[0].raw
+    update_tach(rpm)
 
 
 def read_device_status(node):
@@ -66,10 +91,11 @@ def read_throttle(node):
 
 def read_motor_debug_info(node):
     rpm_sdo = node.sdo[0x2020]
-    rpm = rpm_sdo[4].raw
+    rpm = -1 * rpm_sdo[4].raw
     MOTOR_RPM.set(rpm)
     write_rpm(rpm)
-
+    # update_tach(rpm)
+    
     motor_info = node.sdo[0x4600]
     MOTOR_TEMPERATURE.labels(sensor='Motor1').set(motor_info[3].raw)
     MOTOR_TEMPERATURE.labels(sensor='MotorRemote').set(motor_info[0x10].raw)
@@ -160,11 +186,15 @@ async def main():
 
     atexit.register(lambda: network.disconnect())
 
+
+    node.tpdo.read()
+    node.tpdo[5].add_callback(record_rpm)
+    
     while True:
         read_device_status(node)
-        read_throttle(node)
+        # read_throttle(node)
         read_motor_debug_info(node)
-        await asyncio.sleep(1)
+        await asyncio.sleep(0.5)
 
     network.disconnect()
 
