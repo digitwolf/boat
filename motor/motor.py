@@ -186,10 +186,13 @@ async def main():
 
     atexit.register(lambda: network.disconnect())
 
-
-    node.tpdo.read()
-    node.tpdo[5].add_callback(record_rpm)
-    
+    try:
+        node.tpdo.read()
+        node.tpdo[5].add_callback(record_rpm)
+    except Exception as error:
+        logging.error("Failed to attach RPM callback", error)
+        await asyncio.sleep(60)
+  
     while True:
         try:
             read_device_status(node)
