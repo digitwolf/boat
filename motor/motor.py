@@ -191,9 +191,15 @@ async def main():
     node.tpdo[5].add_callback(record_rpm)
     
     while True:
-        read_device_status(node)
-        read_throttle(node)
-        read_motor_debug_info(node)
+        try:
+            read_device_status(node)
+            read_throttle(node)
+            read_motor_debug_info(node)
+        except Exception as error:
+            logging.error(error)
+            await asyncio.sleep(60)
+            break
+
         await asyncio.sleep(1)
 
     network.disconnect()
