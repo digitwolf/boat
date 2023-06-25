@@ -90,11 +90,11 @@ def read_throttle(node):
 
 
 def read_motor_debug_info(node):
-    #rpm_sdo = node.sdo[0x2020]
-    #rpm = -1 * rpm_sdo[4].raw
-    #MOTOR_RPM.set(rpm)
-    #write_rpm(rpm)
-    # update_tach(rpm)
+    rpm_sdo = node.sdo[0x2020]
+    rpm = -1 * rpm_sdo[4].raw
+    MOTOR_RPM.set(rpm)
+    write_rpm(rpm)
+    update_tach(rpm)
     
     motor_info = node.sdo[0x4600]
     MOTOR_TEMPERATURE.labels(sensor='Motor1').set(motor_info[3].raw)
@@ -194,7 +194,7 @@ async def main():
         read_device_status(node)
         read_throttle(node)
         read_motor_debug_info(node)
-        await asyncio.sleep(3)
+        await asyncio.sleep(1)
 
     network.disconnect()
 
