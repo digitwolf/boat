@@ -43,7 +43,11 @@ def get_rpm_frequency(rpm):
     return abs(rpm) * 180 / 1000
 
 def update_tach(rpm):
-    rpm_pwm.ChangeFrequency(get_rpm_frequency(rpm))
+    if abs(rpm) > 0:
+        rpm_pwm.start(50)
+        rpm_pwm.ChangeFrequency(get_rpm_frequency(rpm))
+    else:
+        rpm_pwm.stop()
 
 
 def write_rpm(rpm):
@@ -169,9 +173,9 @@ handlers = {
     '0x5100_4': heatsink_temperature_handler
 }
 
-# def attach_listeners(node):
-#     node.tpdo[3].add_callback(temperature_handler)
-#     node.tpdo[5].add_callback(velocity_handler)
+def attach_listeners(node):
+    node.tpdo[3].add_callback(temperature_handler)
+    node.tpdo[5].add_callback(velocity_handler)
 
 async def main():
     start_http_server(7002)
@@ -186,12 +190,12 @@ async def main():
 
     atexit.register(lambda: network.disconnect())
 
-    try:
-        node.tpdo.read()
-        node.tpdo[5].add_callback(record_rpm)
-    except Exception as error:
-        logging.error("Failed to attach RPM callback", error)
-        await asyncio.sleep(60)
+#     try:
+#         node.tpdo.read()
+#         node.tpdo[5].add_callback(record_rpm)
+#     except Exception as error:
+#         logging.error("Failed to attach RPM callback", error)
+#         await asyncio.sleep(60)
   
     while True:
         try:
@@ -200,8 +204,8 @@ async def main():
             read_motor_debug_info(node)
         except Exception as error:
             logging.error(error)
-            await asyncio.sleep(60)
-            break
+            await asyncio.sleep(3)
+            continue
 
         await asyncio.sleep(1)
 
