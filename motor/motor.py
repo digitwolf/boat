@@ -10,12 +10,21 @@ import can
 import canopen
 from influxdb import InfluxDBClient
 from prometheus_client import Gauge, start_http_server
+from prometheus_client import Enum
 
 import RPi.GPIO as GPIO
 GPIO.setmode(GPIO.BOARD)		#set pin numbering system
 GPIO.setup(32,GPIO.OUT)
 rpm_pwm = GPIO.PWM(32, 1)
 rpm_pwm.start(50)
+
+# Motor pump config
+MOTOR_PUMP_PIN = 10 # todo: set the right pin
+MOTOR_PUMP_ON = False
+MOTOR_PUMP_ON_TEMP = 55
+MOTOR_PUMP_OFF_TEMP = 50
+
+GPIO.setup(MOTOR_PUMP_PIN, GPIO.OUT)
 
 BATTERY_VOLTAGE = Gauge('motor_battery_voltage', 'Motor Battery Voltage, V')
 MOTOR_CURRENT = Gauge('motor_current_amps', 'Motor Battery Current, A', ['sensor'])
@@ -27,12 +36,26 @@ THROTTLE = Gauge('throttle', 'Throttle input V, direction', ['sensor'])
 MOTOR_TEMPERATURE = Gauge('motor_temperature', 'Motor temperatures', ['sensor'])
 MOTOR_TEMPERATURE_OVERALL = Gauge('motor_temperature_overall',
                                   'Highest temperature from all sources (heatsink, motor, etc).. In 12.4 DegC')
+MOTOR_PUMP_STATE = Enum('motor_pump_state', 'State of cooling pump', states=['on', 'off'])
 
 MOTOR_TORQUE = Gauge('motor_torque', 'Torque in 12.4Nm', ['type'])
 
 MOTOR_RPM = Gauge('motor_rpm', 'RPM')
 
 db_client = InfluxDBClient('localhost', 8086, 'kisa', 'Ar@nji', 'boat')
+
+def handle_motor_temperature(temp):
+    if (temp > MOTOR_PUMP_ON_TEMP) and (!MOTOR_PUMP_ON):
+        MOTOR_PUMP_ON = True
+        GPIO.output(MOTOR_PUMP_PIN, MOTOR_PUMP_ON)
+        MOTOR_PUMP_STATE.state('on')
+
+    if (temp < MOTOR_PUMP_OFF_TEMP) and (MOTOR_PUMP_ON):
+        MOTOR_PUMP_ON = FALSE
+        GPIO.output(MOTOR_PUMP_PIN, MOTOR_PUMP_ON)
+        MOTOR_PUMP_STATE.state('off')
+    
+
 
 def get_rpm_frequency(rpm):
     """
@@ -102,6 +125,7 @@ def read_motor_debug_info(node):
     
     motor_info = node.sdo[0x4600]
     MOTOR_TEMPERATURE.labels(sensor='Motor1').set(motor_info[3].raw)
+    handle_motor_temperature(motor_info[3].raw)
     MOTOR_TEMPERATURE.labels(sensor='MotorRemote').set(motor_info[0x10].raw)
     MOTOR_CURRENT.labels(sensor='AC').set(motor_info[0xC].raw * 0.0625)
     MOTOR_VOLTAGE.set(motor_info[0xD].raw * 0.0625)
